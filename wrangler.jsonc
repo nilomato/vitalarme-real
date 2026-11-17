@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "vitalarme-db",
-      "database_id": "487936c1-0eee-4fd6-854e-3c02caa20424",
+      "database_id": "COLE_AQUI_O_DATABASE_ID",
       "migrations_dir": "migrations"
     }
   ],
