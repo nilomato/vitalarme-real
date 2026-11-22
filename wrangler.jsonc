@@ -16,6 +16,6 @@
     }
   ],
   "vars": {
-    "SMS_ENABLED": "false"
+    "SMS_ENABLED": "true"
   }
 }
