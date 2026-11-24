@@ -26,7 +26,7 @@ export function view(attempt, steps) {
     needsPin: attempt.needs_pin === null ? null : attempt.needs_pin === 1,
     confirmedAt: attempt.confirmed_at,
     open: attempt.status === 'em_andamento' || attempt.status === 'comandos_solicitados',
-    steps: steps.map(s => ({ key: s.step_key, label: stepLabel(s.step_key), status: s.status }))
+    steps: steps.map(s => ({ key: s.step_key, label: stepLabel(s.step_key), status: s.status, errorCode: s.error_code }))
   };
   if (attempt.status === 'confirmado') return { ...base, status: 'confirmado', next: 'done' };
   if (attempt.status === 'comandos_solicitados') return { ...base, status: 'comandos_solicitados', next: 'confirm' };
@@ -97,12 +97,13 @@ async function runStep(ctx, attemptId, step, confirmRetry) {
     rowId = row.id;
   }
   const result = await ctx.send(env, twilioDestination(device.gsm_phone), step.body);
+  step.errorCode = result.errorCode;
   await DB.prepare('UPDATE sms_attempts SET status = ?, twilio_sid = ?, error_code = ?, error_text = ?, updated_at = ? WHERE id = ?')
     .bind(result.outcome, result.sid, result.errorCode, result.errorText, now(), rowId).run();
   const historyType = { aceito: 'ENVIO_SOLICITADO', falha: 'ENVIO_FALHOU', incerto: 'ENVIO_INCERTO' }[result.outcome];
   const historyText = {
     aceito: `Comando "${step.label}" aceito pelo Twilio (entrega ao dispositivo não confirmada).`,
-    falha: `Comando "${step.label}" recusado pelo Twilio.`,
+    falha: `Comando "${step.label}" recusado pelo Twilio${result.errorCode ? ` (código ${result.errorCode})` : ''}.`,
     incerto: `Comando "${step.label}" com resultado incerto: pode ter sido enviado.`
   }[result.outcome];
   await db.addHistory(DB, device.id, historyType, historyText);
@@ -114,7 +115,7 @@ async function runSteps(ctx, attemptId, plan, confirmRetry) {
     const outcome = await runStep(ctx, attemptId, step, confirmRetry);
     if (outcome === 'aceito') continue;
     if (outcome === 'falha') {
-      throw new HttpError(502, 'SEND_FAILED', `O Twilio recusou a etapa "${step.label}". As etapas seguintes não foram enviadas.`);
+      throw new HttpError(502, 'SEND_FAILED', `O Twilio recusou a etapa "${step.label}"${step.errorCode ? ` (código ${step.errorCode})` : ''}. As etapas seguintes não foram enviadas.`);
     }
     throw new HttpError(
       502,
